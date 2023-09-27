@@ -1,3 +1,4 @@
+import torch
 import torch.nn as nn
 
 class Apply(nn.Module):
@@ -9,3 +10,6 @@ class Apply(nn.Module):
     
     def forward(self, X):
         return self.func(X, *self.func_args, **self.func_kwargs)
+
+def normalize(x: torch.Tensor, dim=-1, norm=2):
+    return x / x.norm(dim=dim, p=norm, keepdim=True)
