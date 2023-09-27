@@ -10,6 +10,7 @@ class Apply(nn.Module):
     
     def forward(self, X):
         return self.func(X, *self.func_args, **self.func_kwargs)
-
-def normalize(x: torch.Tensor, dim=-1, norm=2, eps=1e-6):
+    
+def normalize(x: torch.Tensor, dim: int = -1, norm: int | float | str= 2,
+              eps: float = 1e-6) -> torch.Tensor:
     return x / (x.norm(dim=dim, p=norm, keepdim=True) + eps)
