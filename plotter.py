@@ -8,8 +8,9 @@ import pandas as pd
 import plotly
 import plotly.express as px
 import plotly.graph_objects as go
-from IPython.display import display
+from IPython.display import display, Image
 from plotly.subplots import make_subplots
+from tqdm.auto import tqdm
 
 
 Report = dict[str, float]
@@ -19,23 +20,42 @@ class History:
     val: list[Report] = field(default_factory=list)
     drop_query: str = 'phase != phase' # query to return none
     
-    def push_epoch(self, train_report: Report, test_report: Report) -> None:
+    def push_epoch(self, *reports: tuple[Report, Report] | tuple[Report]) -> None:
+        if len(reports) == 1:
+            val_report, = reports
+            train_report = {}
+        else:
+            train_report, val_report = reports
         self.train.append(train_report)
-        self.val.append(test_report)
+        self.val.append(val_report)
     
     def as_dfs(self) -> tuple[pd.DataFrame, pd.DataFrame]:
-        # return metrics as 2 DataFrames with additional epoch and phase (train / test) columns
+        # return metrics as 2 DataFrames with additional epoch and phase (train / val) columns
         # for plotting
         
         df = pd.concat(map(pd.DataFrame, [self.train, self.val]),
-                       keys=["train", "test"])\
+                       keys=["train", "val"])\
                 .reset_index(names=["phase", "epoch"])
         df.epoch += 1
         
         return df.query(f"not ({self.drop_query})"), df.query(self.drop_query)
     
+    def as_df(self) -> pd.DataFrame:
+        return self.as_dfs()[0]
+    
     def __len__(self) -> int:
-        return pd.concat(self.as_dfs()).epoch.nunique() 
+        return len(self.train)
+    
+    def range(self, max_epochs, stopper = None, do_tqdm = False):
+        loop = range(max(max_epochs - len(self), 0))
+        if do_tqdm:
+            loop = tqdm(loop)
+            
+        for i in loop:
+            if stopper is not None and stopper:
+                return
+            yield i
+    
 
 @dataclass
 class Plotter:
@@ -132,3 +152,6 @@ class Plotter:
             
     def draw_no_widget(self):
         return plotly.io.from_json(self.fig.to_json())
+
+def plotly_static(fig: plotly.graph_objs._figure.Figure, format: str = "png") -> Image:
+    return Image(fig.to_image(format=format))

@@ -1,5 +1,5 @@
 import ast
-from _ast import Call, Module
+from _ast import Call, Module, Name
 from collections import defaultdict
 from itertools import count
 
@@ -35,8 +35,9 @@ class PrintTransformer(ast.NodeTransformer):
         super().__init__()
 
     def visit_Call(self, node: Call) -> Call:
-        if isinstance(node.func, ast.Name) and node.func.id == "print":
-            node.func.id = "_reprint"
+        func = node.func
+        if isinstance(func, ast.Name) and func.id == "print":
+            func.id = "_reprint"
             node.keywords.append(ast.keyword(
                 arg="html_id",
                 value=ast.Constant(next(self.count))
