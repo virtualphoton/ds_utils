@@ -1,6 +1,7 @@
 from collections import defaultdict
 from dataclasses import dataclass
 from typing import Callable, Any
+from warnings import warn
 
 import numpy as np
 import torch
@@ -8,32 +9,53 @@ import torch.nn as nn
 from torch.utils.data import DataLoader
 from tqdm.auto import tqdm
 
-from .magic import reprint
+try:
+    from .magic import reprint
+except ImportError:
+    warn("Couldn't load magic!")
+    reprint = lambda t: t
 
 __all__ = ["loopa", "ACC_METRIC", "EarlyStopper"]
 
-Metrics = dict[
-    str, 
+ListOfMetrics = list[
+    str |
     tuple[
-        Callable[[torch.Tensor, torch.Tensor], Any],
-        Callable[[list[Any]], float],
-    ] | Callable[[torch.Tensor, torch.Tensor], float]]
+        str,
+        Callable[[torch.Tensor, torch.Tensor], Any], # metric calculation
+        Callable[[list[Any]], float],                # metric aggregation
+    ]
+]
+
+def to(X, device):
+    if isinstance(X, dict):
+        for key, val in X.items():
+            X[key] = val.to(device)
+        return X
+    if isinstance(X, torch.Tensor):
+        return X.to(device)
+    raise RuntimeError(f"Incorrect type {type(X)}")
 
 @reprint
 def _loopa(*, model: nn.Module, dataloader: DataLoader, device: str,
-           loss_fn, optim, metrics: Metrics,
+           loss_fn, optim, metrics: ListOfMetrics,
            is_train: bool = True, accum_grad: int = 1):
     
     metric_lists = defaultdict(list)
-    for metric, val in metrics.items():
-        try:
-            iter(val)
-        except TypeError:
-            metrics[metric] = (val, np.mean)
+    _metrics = []
+    for metric in metrics:
+        if isinstance(metric, str):
+            if metric not in METRICS:
+                raise RuntimeError(f"couldn't find metric: {metric}")
+            _metrics.append((metric, *METRICS[metric]))
+        else:
+            _metrics.append(metric)
+    metrics = _metrics
+            
     if is_train:
         optim.zero_grad()
-    for i, (X, y) in enumerate(tqdm(dataloader)):
-        X, y = X.to(device), y.to(device)
+        
+    for i, (X, y) in enumerate(tqdm(dataloader, desc="train phase" if is_train else "val phase")):
+        X, y = to(X, device), to(y, device)
         y_pred = model(X)
         loss = loss_fn(y_pred, y) / accum_grad
         
@@ -44,7 +66,7 @@ def _loopa(*, model: nn.Module, dataloader: DataLoader, device: str,
                 optim.zero_grad()
             
         with torch.no_grad():
-            for metric, (fn, _) in metrics.items():
+            for metric, fn, _ in metrics:
                 if metric == "loss":
                     metric_lists["loss"].append(loss.item() * accum_grad)
                 else:
@@ -55,14 +77,14 @@ def _loopa(*, model: nn.Module, dataloader: DataLoader, device: str,
         optim.zero_grad()
     
     metric_results = {}
-    for key, (_, agg) in metrics.items():
+    for key, _, agg in metrics:
         metric_results[key] = agg(metric_lists[key])
     
     return metric_results
 
 @reprint
 def loopa(model: nn.Module, dataloader: DataLoader, *, device: str,
-           loss_fn=None, optim=None, metrics: Metrics,
+           loss_fn=None, optim=None, metrics: ListOfMetrics,
            is_train: bool = True, accum_grad: int = 1):
     if is_train:
         model.train()
@@ -90,8 +112,8 @@ class EarlyStopper:
     model: nn.Module
     save_path: str
     bound_history: "History"
-    loss: str = "loss",
-    patience: int = 3
+    loss: str = "loss"
+    patience: int | None = 3
     min_delta: float = 0
     
     def __post_init__(self):
@@ -123,19 +145,26 @@ class EarlyStopper:
         returns True if training should stop else False
         """ 
         losses = self.get_losses()
+        if not len(losses):
+            return False
+        
         if losses[-1] <= self.best_loss:
             self.best_loss = losses[-1]
             self.best_epoch = len(self.bound_history)
             torch.save(self.model.state_dict(), self.save_path)
             return False
-        return len(losses) >= self.patience + 1 and \
-                np.all(losses[-self.patience:] >= self.best_loss + self.min_delta)
+        return len(losses) > self.patience and np.all(losses[-self.patience:] > self.best_loss + self.min_delta)
 
 def mean_metric(sum_of_metrics_func: Callable[[torch.Tensor, torch.Tensor], float | torch.Tensor]):
     # ! if return is torch.Tensor, it has to be a scalar
-    collector = lambda y_pred, y_true: (sum_of_metrics_func, len(y_true))
+    collector = lambda y_pred, y_true: (sum_of_metrics_func(y_pred, y_true), len(y_true))
     def aggregator(results):
         correct, total = map(sum, zip(*results))
         ret = correct / total
         return ret.item() if isinstance(ret, torch.Tensor) else ret
     return collector, aggregator
+
+METRICS = {
+    "loss": [None, np.mean],
+    "acc": mean_metric(lambda y_pred, y_true: (y_pred.argmax(-1) == y_true).sum()),
+}

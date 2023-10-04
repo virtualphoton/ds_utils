@@ -49,10 +49,10 @@ class History:
     def range(self, max_epochs, stopper = None, do_tqdm = False):
         loop = range(max(max_epochs - len(self), 0))
         if do_tqdm:
-            loop = tqdm(loop)
+            loop = tqdm(loop, desc="epoch")
             
         for i in loop:
-            if stopper is not None and stopper:
+            if stopper is not None and stopper():
                 return
             yield i
     
@@ -72,7 +72,7 @@ class Plotter:
         if self.path is not None:
             self.path = Path(self.path)
             if self.path.exists():
-                warnings.warn("Warning...........Message")
+                warnings.warn("File already exists!")
             
         self._inited = False
         if not self.titles:
@@ -134,7 +134,7 @@ class Plotter:
                         kept = self.traces[("kept", metric, trace.name)]
                         y = np.full_like(trace.y, kept.y[0])
                         
-                        if not all(trace.y == y):
+                        if not all(trace.y == y) or trace.marker["symbol"] != "star":
                             trace.customdata = trace.y[:, None]
                             trace.y = y
                             trace.hovertemplate = trace.hovertemplate.replace(
