@@ -10,7 +10,7 @@ from torch.utils.data import DataLoader
 from tqdm.auto import tqdm
 
 try:
-    from .magic import reprint
+    from magic import reprint
 except ImportError:
     warn("Couldn't load magic!")
     reprint = lambda t: t
