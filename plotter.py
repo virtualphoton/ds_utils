@@ -55,7 +55,8 @@ class History:
             if stopper is not None and stopper():
                 return
             yield i
-    
+        if stopper is not None:
+            stopper()
 
 @dataclass
 class Plotter:
