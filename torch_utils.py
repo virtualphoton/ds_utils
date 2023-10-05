@@ -46,22 +46,3 @@ def device_default(f):
 def map_idx(values: Iterable[Hashable]) -> dict[Hashable, int]:
     return {value : idx for idx, value in enumerate(values)}
 
-##########################################
-
-def create_mean_metric(sum_of_metrics_func):
-    collector = lambda y_pred, y_true: (sum_of_metrics_func, len(y_true))
-    def aggregator(results):
-        correct, total = map(sum, zip(*results))
-        return correct / total
-    return collector, aggregator
-
-def acc_collector(y_pred, y_true):
-    return (y_pred.argmax(-1) == y_true).sum().item(), len(y_true)
-
-def acc_agg(results):
-    correct, total = map(sum, zip(*results))
-    return correct / total
-    
-
-ACC_METRIC = [acc_collector, acc_agg]
-
