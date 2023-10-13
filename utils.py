@@ -1,6 +1,5 @@
 import builtins
 
-import torch.nn as nn
 from toolz import compose
 
 def map(funcs, *args):

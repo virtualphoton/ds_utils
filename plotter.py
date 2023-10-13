@@ -56,7 +56,7 @@ class History:
                 return
             yield i
         if stopper is not None:
-            stopper()
+            stopper.state.save_history()
 
 @dataclass
 class Plotter:

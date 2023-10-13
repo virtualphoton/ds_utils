@@ -1,3 +1,4 @@
+import os
 from collections import defaultdict
 from dataclasses import dataclass
 from typing import Callable, Any
@@ -10,7 +11,7 @@ from torch.utils.data import DataLoader
 from tqdm.auto import tqdm
 
 try:
-    from magic import reprint
+    from .magic import reprint
 except ImportError:
     warn("Couldn't load magic!")
     reprint = lambda t: t
@@ -50,14 +51,14 @@ def _loopa(*, model: nn.Module, dataloader: DataLoader, device: str,
         else:
             _metrics.append(metric)
     metrics = _metrics
-            
-    if is_train:
-        optim.zero_grad()
+    do_loss = is_train or "loss" in next(zip(*metrics))
+    
+    optim.zero_grad() if is_train else None
         
     for i, (X, y) in enumerate(tqdm(dataloader, desc="train phase" if is_train else "val phase")):
         X, y = to(X, device), to(y, device)
         y_pred = model(X)
-        loss = loss_fn(y_pred, y) / accum_grad
+        loss = loss_fn(y_pred, y) / accum_grad if do_loss else None
         
         if is_train:
             loss.backward()
@@ -108,17 +109,51 @@ except ImportError:
     pass
 
 @dataclass
-class EarlyStopper:
+class State:
     model: nn.Module
-    save_path: str
-    bound_history: "History"
+    optimizer: torch.optim.Optimizer
+    history: "History"
+    path: str
+    
+    def __post_init__(self):
+        if os.path.exists(self.path):
+            warn(f"Saver: {self.path} already exists!")
+    
+    def save(self):
+        torch.save(dict(
+            model=self.model.state_dict,
+            optimizer=self.optimizer.state_dict,
+            history=self.history
+        ), self.path)
+        self.save_history()
+    
+    def load_inplace(self):
+        chkp = torch.load(self.path)
+        self.model.load_state_dict(chkp["model"])
+        self.optimizer.load_state_dict(chkp["model"])
+        
+        self.history.train = chkp["history"].train
+        self.history.val = chkp["history"].val
+        self.history.drop_query = chkp["history"].drop_query
+        
+    def save_history(self):
+        # for learning curves, need full history not just until the best
+        torch.save(dict(history=self.history),
+                   f"{self.path}.history")
+        
+    def load_history(self):
+        return torch.load(f"{self.path}.history")["history"]
+    
+@dataclass
+class EarlyStopper:
+    state: State
     loss: str = "loss"
     patience: int | None = 3
     min_delta: float = 0
     
     def __post_init__(self):
-        self.best_epoch: int = -1 if not len(self.bound_history) else self.get_losses().argmin() + 1
-        self.best_loss = np.inf if not len(self.bound_history) else self.get_losses().min()
+        self.best_epoch: int = -1 if not len(self.state.history) else self.get_losses().argmin() + 1
+        self.best_loss = np.inf if not len(self.state.history) else self.get_losses().min()
         
     def __str__(self):
         if self.loss.startswith("-"):
@@ -137,7 +172,7 @@ class EarlyStopper:
             metric = self.loss
             sign = 1
         return np.array([sign * res[metric]
-                         for res in self.bound_history.val])
+                         for res in self.state.history.val])
     
     def __call__(self):
         """
@@ -150,8 +185,8 @@ class EarlyStopper:
         
         if losses[-1] <= self.best_loss:
             self.best_loss = losses[-1]
-            self.best_epoch = len(self.bound_history)
-            torch.save(self.model.state_dict(), self.save_path)
+            self.best_epoch = len(self.state.history)
+            self.state.save()
             return False
         return len(losses) > self.patience and np.all(losses[-self.patience:] > self.best_loss + self.min_delta)
 
