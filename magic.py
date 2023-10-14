@@ -156,11 +156,15 @@ def reprint(f, cell = None):
 reprint.print = _reprint
 reprint.tqdm = _retqdm
     
-def display_no_widgets(plotter):
+def display_no_widgets(plotter, outs=None):
     clear_output()
     display(plotter.draw_no_widget())
-    print("\n".join(output.outputs[0]["text"] for output in _OUTPUTS.values() if output.outputs))
+    if outs is None:
+        outs = _OUTPUTS.values()
+    print("\n".join(output.outputs[0]["text"] for output in outs if output.outputs))
 
+def get_outputs():
+    return _OUTPUTS.values()
 
 class SoftCtrlCTransformer(ast.NodeTransformer):
     def visit_Module(self, node: Module) -> Module:

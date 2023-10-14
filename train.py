@@ -121,8 +121,8 @@ class State:
     
     def save(self):
         torch.save(dict(
-            model=self.model.state_dict,
-            optimizer=self.optimizer.state_dict,
+            model=self.model.state_dict(),
+            optimizer=self.optimizer.state_dict(),
             history=self.history
         ), self.path)
         self.save_history()
@@ -172,7 +172,8 @@ class EarlyStopper:
             metric = self.loss
             sign = 1
         return np.array([sign * res[metric]
-                         for res in self.state.history.val])
+                         for res in self.state.history.val
+                         if metric in res])
     
     def __call__(self):
         """
