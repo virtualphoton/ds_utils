@@ -39,7 +39,8 @@ def to(X, device):
 @reprint
 def _loopa(*, model: nn.Module, dataloader: DataLoader, device: str,
            loss_fn, optim, metrics: ListOfMetrics,
-           is_train: bool = True, accum_grad: int = 1):
+           is_train: bool = True, accum_grad: int = 1,
+           scheduler: torch.optim.lr_scheduler.LRScheduler | None = None):
     
     metric_lists = defaultdict(list)
     _metrics = []
@@ -72,7 +73,8 @@ def _loopa(*, model: nn.Module, dataloader: DataLoader, device: str,
                     metric_lists["loss"].append(loss.item() * accum_grad)
                 else:
                     metric_lists[metric].append(fn(y_pred, y))
-    
+    if scheduler is not None and is_train:
+        scheduler.step()
     if is_train and (i + 1) % accum_grad:
         # optim.step()
         optim.zero_grad()
@@ -86,18 +88,19 @@ def _loopa(*, model: nn.Module, dataloader: DataLoader, device: str,
 @reprint
 def loopa(model: nn.Module, dataloader: DataLoader, *, device: str,
            loss_fn=None, optim=None, metrics: ListOfMetrics,
-           is_train: bool = True, accum_grad: int = 1):
+           is_train: bool = True, accum_grad: int = 1,
+           scheduler: torch.optim.lr_scheduler.LRScheduler | None = None):
     if is_train:
         model.train()
         return _loopa(model=model, dataloader=dataloader, device=device,
                       loss_fn=loss_fn, optim=optim, metrics=metrics, accum_grad=accum_grad,
-                      is_train=is_train)
+                      is_train=is_train, scheduler=scheduler)
     
     with torch.no_grad():
         model.eval()
         ret = _loopa(model=model, dataloader=dataloader, device=device,
                      loss_fn=loss_fn, optim=optim, metrics=metrics, accum_grad=accum_grad,
-                     is_train=is_train)
+                     is_train=is_train, scheduler=scheduler)
         model.train()
         return ret
 
@@ -114,23 +117,27 @@ class State:
     optimizer: torch.optim.Optimizer
     history: "History"
     path: str
+    scheduler: torch.optim.lr_scheduler.LRScheduler | None = None
     
     def __post_init__(self):
         if os.path.exists(self.path):
             warn(f"Saver: {self.path} already exists!")
     
     def save(self):
-        torch.save(dict(
-            model=self.model.state_dict(),
-            optimizer=self.optimizer.state_dict(),
-            history=self.history
-        ), self.path)
+        state_dict = dict(model=self.model.state_dict(),
+                          optimizer=self.optimizer.state_dict(),
+                          history=self.history)
+        if self.scheduler is not None:
+            state_dict["scheduler"] = self.scheduler
+        torch.save(state_dict, self.path)
         self.save_history()
     
     def load_inplace(self):
         chkp = torch.load(self.path)
         self.model.load_state_dict(chkp["model"])
         self.optimizer.load_state_dict(chkp["model"])
+        if self.scheduler is not None:
+            self.scheduler.load_state_dict(chkp["scheduler"])
         
         self.history.train = chkp["history"].train
         self.history.val = chkp["history"].val
@@ -143,6 +150,9 @@ class State:
         
     def load_history(self):
         return torch.load(f"{self.path}.history")["history"]
+    
+    def as_tuple(self):
+        return self.model, self.optimizer, self.history, self.scheduler
     
 @dataclass
 class EarlyStopper:
