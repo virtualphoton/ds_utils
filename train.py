@@ -54,7 +54,7 @@ def _loopa(*, model: nn.Module, dataloader: DataLoader, device: str,
     metrics = _metrics
     do_loss = is_train or "loss" in next(zip(*metrics))
     
-    optim.zero_grad() if is_train else None
+    if is_train: optim.zero_grad() if is_train else None
         
     for i, (X, y) in enumerate(tqdm(dataloader, desc="train phase" if is_train else "val phase")):
         X, y = to(X, device), to(y, device)
