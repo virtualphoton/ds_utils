@@ -13,8 +13,11 @@ from tqdm.auto import tqdm
 try:
     from .magic import reprint
 except ImportError:
-    warn("Couldn't load magic!")
-    reprint = lambda t: t
+    try:
+        from magic import reprint
+    except ImportError:
+        warn("Couldn't load magic!")
+        reprint = lambda t: t
 
 __all__ = ["loopa", "ACC_METRIC", "EarlyStopper"]
 
