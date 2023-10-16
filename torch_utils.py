@@ -1,4 +1,4 @@
-from functools import wraps
+from functools import wraps, partial
 from typing import TypeVar, Iterable, Hashable
 
 import numpy as np
@@ -35,11 +35,13 @@ def train_val_test_split(*arrays, val_size: float, test_size: float = 0, **kwarg
     
     return sum(zip(train, val, test), start=())
 
-def device_default(f):
+def device_default(f, globs=None):
+    if isinstance(f, dict):
+        return partial(device_default, globs=f)
     @wraps(f)
     def inner(*args, device=None, **kwargs):
         if device is None:
-            device = f.__globals__["device"]
+            device = (globs or f.__globals__)["device"]
         return f(*args, **kwargs, device=device)
     return inner
 
