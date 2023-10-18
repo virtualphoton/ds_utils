@@ -9,7 +9,10 @@ import torch.nn as nn
 try:
     from plotter import History
 except ImportError:
-    pass
+    try:
+        from .plotter import History
+    except ImportError:
+        raise ImportError("download `plotter.py`")
 
 @dataclass
 class State:
@@ -26,7 +29,7 @@ class State:
     def save(self):
         state_dict = dict(model=self.model.state_dict(),
                           optimizer=self.optimizer.state_dict(),
-                          history=self.history)
+                          history=self.history.state_dict())
         if self.scheduler is not None:
             state_dict["scheduler"] = self.scheduler.state_dict()
         torch.save(state_dict, self.path)
@@ -36,20 +39,19 @@ class State:
         chkp = torch.load(self.path)
         self.model.load_state_dict(chkp["model"])
         self.optimizer.load_state_dict(chkp["optimizer"])
+        self.history.load_state_dict(chkp["history"])
         if self.scheduler is not None:
             self.scheduler.load_state_dict(chkp["scheduler"])
         
-        self.history.train = chkp["history"].train
-        self.history.val = chkp["history"].val
-        self.history.drop_query = chkp["history"].drop_query
-        
     def save_history(self):
         # for learning curves, need full history not just until the best
-        torch.save(dict(history=self.history),
+        torch.save(self.history.state_dict(),
                    f"{self.path}.history")
         
     def load_history(self):
-        return torch.load(f"{self.path}.history")["history"]
+        his = History()
+        his.load_state_dict(torch.load(f"{self.path}.history"))
+        return his
     
     def as_tuple(self):
         return self.model, self.optimizer, self.history, self.scheduler

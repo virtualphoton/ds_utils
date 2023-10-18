@@ -60,6 +60,12 @@ class History:
             yield i
         if stopper is not None:
             stopper.state.save_history()
+    
+    def state_dict(self):
+        return {field : getattr(self, field) for field in ["train", "val", "drop_query"]}
+    
+    def load_state_dict(self, dict_):
+        return {field : setattr(self, field, dict_[field]) for field in ["train", "val", "drop_query"]}
 
 @dataclass
 class Plotter:
