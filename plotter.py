@@ -47,11 +47,14 @@ class History:
         return len(self.train)
     
     def range(self, max_epochs, stopper = None, do_tqdm = False):
-        loop = range(max(max_epochs - len(self), 0))
+        loop = range(max(max_epochs, 0))
+        skip = len(self)
         if do_tqdm:
             loop = tqdm(loop, desc="epoch")
             
         for i in loop:
+            if i < skip:
+                continue
             if stopper is not None and stopper():
                 return
             yield i
