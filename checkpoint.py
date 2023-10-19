@@ -63,9 +63,12 @@ class EarlyStopper:
     patience: int | None = 3
     min_delta: float = 0
     
+    _last_history_len: int = 0
+    
     def __post_init__(self):
         self.best_epoch: int = -1 if not len(self.state.history) else self.get_losses().argmin() + 1
         self.best_loss = np.inf if not len(self.state.history) else self.get_losses().min()
+        self._last_history_len = len(self.state.history)
         
     def __str__(self):
         if self.loss.startswith("-"):
@@ -91,10 +94,13 @@ class EarlyStopper:
         """
         saves model on improvement
         returns True if training should stop else False
-        """ 
+        """
         losses = self.get_losses()
-        if not len(losses):
+        
+        if not len(losses) or len(losses) == self._last_history_len:
             return False
+        
+        self._last_history_len = len(losses)
         
         if losses[-1] <= self.best_loss:
             self.best_loss = losses[-1]
