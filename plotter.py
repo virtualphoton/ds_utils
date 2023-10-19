@@ -117,8 +117,9 @@ class Plotter:
         for handle, df in ("kept", df_kept), ("dropped", df_dropped):
             for i, metric in enumerate(self.metrics):
                 for trace in px.scatter(df.dropna(subset=metric),
-                                        x="epoch", y=metric, color="phase")["data"]:
-                    
+                                        x="epoch", y=metric,
+                                        color="phase", color_discrete_map={"train" : "#636efa",
+                                                                           "val" : "#EF553B"})["data"]:
                     if (handle, metric, trace.name) in self.traces:
                         _trace = self.traces[(handle, metric, trace.name)]
                         # avoid unneeded assignments, for they cause lags
