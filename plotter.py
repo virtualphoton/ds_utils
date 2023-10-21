@@ -55,11 +55,15 @@ class History:
         for i in loop:
             if i < skip:
                 continue
-            if stopper is not None and stopper():
-                return
+            if stopper and stopper():
+                break
             yield i
-        if stopper is not None:
-            stopper.state.save_history()
+            
+            if stopper and stopper.hist_changed():
+                stopper.state.save_history()
+                
+        if stopper and stopper.hist_changed():
+                stopper.state.save_history()
     
     def state_dict(self):
         return {field : getattr(self, field) for field in ["train", "val", "drop_query"]}

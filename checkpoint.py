@@ -36,7 +36,7 @@ class State:
         self.save_history()
     
     def load_inplace(self):
-        chkp = torch.load(self.path)
+        chkp = torch.load(self.path, "cpu")
         self.model.load_state_dict(chkp["model"])
         self.optimizer.load_state_dict(chkp["optimizer"])
         self.history.load_state_dict(chkp["history"])
@@ -63,12 +63,11 @@ class EarlyStopper:
     patience: int | None = 3
     min_delta: float = 0
     
-    _last_history_len: int = 0
+    _last_history_len: int = None
     
     def __post_init__(self):
         self.best_epoch: int = -1 if not len(self.state.history) else self.get_losses().argmin() + 1
         self.best_loss = np.inf if not len(self.state.history) else self.get_losses().min()
-        self._last_history_len = len(self.state.history)
         
     def __str__(self):
         if self.loss.startswith("-"):
@@ -90,14 +89,20 @@ class EarlyStopper:
                          for res in self.state.history.val
                          if metric in res])
     
+    def hist_changed(self):
+        return len(self.state.history) != self._last_history_len
+    
     def __call__(self):
         """
         saves model on improvement
         returns True if training should stop else False
         """
+        if not self.hist_changed(): return False
+        
+        self._last_history_len = len(self.state.history)
         losses = self.get_losses()
         
-        if not len(losses) or len(losses) == self._last_history_len:
+        if not len(losses):
             return False
         
         self._last_history_len = len(losses)
