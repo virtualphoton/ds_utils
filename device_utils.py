@@ -4,7 +4,7 @@ from functools import wraps, partial
 import torch
 
 
-def get_computing_device(dev = 0):
+def get_computing_device(dev = 0, verbose = False):
     if torch.cuda.is_available():
         if os.environ.get("IMLADRIS", "False").lower() == "true":
             # 1, 2 - A4000
@@ -16,13 +16,12 @@ def get_computing_device(dev = 0):
         
     else:
         device = torch.device('cpu')
+    if verbose:
+        print(f"chosen device: {device}")
     return device
 
-device = get_computing_device(6)
-print(device)
 
-
-def device_default(f, globs=None):
+def device_default(f, globs = None):
     if isinstance(f, dict):
         return partial(device_default, globs=f)
     @wraps(f)
