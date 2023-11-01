@@ -53,7 +53,7 @@ class State:
         his.load_state_dict(torch.load(f"{self.path}.history"))
         return his
     
-    def as_tuple(self):
+    def as_tuple(self) -> tuple[nn.Module, torch.optim.Optimizer, "History", torch.optim.lr_scheduler.LRScheduler | None]:
         return self.model, self.optimizer, self.history, self.scheduler
     
 @dataclass
