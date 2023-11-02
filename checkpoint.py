@@ -6,23 +6,18 @@ import numpy as np
 import torch
 import torch.nn as nn
 
-try:
-    from plotter import History
-except ImportError:
-    try:
-        from .plotter import History
-    except ImportError:
-        raise ImportError("download `plotter.py`")
+from .plotter import History
 
 @dataclass
 class State:
     model: nn.Module
     optimizer: torch.optim.Optimizer
-    history: "History"
-    path: str
+    history: History
     scheduler: torch.optim.lr_scheduler.LRScheduler | None = None
+    path: str = None
     
     def __post_init__(self):
+        assert self.path is not None
         if os.path.exists(self.path):
             warn(f"Saver: {self.path} already exists!")
     
@@ -53,7 +48,7 @@ class State:
         his.load_state_dict(torch.load(f"{self.path}.history"))
         return his
     
-    def as_tuple(self) -> tuple[nn.Module, torch.optim.Optimizer, "History", torch.optim.lr_scheduler.LRScheduler | None]:
+    def as_tuple(self) -> tuple[nn.Module, torch.optim.Optimizer, History, torch.optim.lr_scheduler.LRScheduler | None]:
         return self.model, self.optimizer, self.history, self.scheduler
     
 @dataclass
