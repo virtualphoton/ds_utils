@@ -1,5 +1,6 @@
+import warnings
 from collections import defaultdict
-from typing import Callable, Any, ContextManager
+from typing import Callable, Any
 from warnings import warn
 
 import numpy as np
@@ -45,9 +46,9 @@ def to(X, device):
 @reprint
 def _loopa(*, model: nn.Module, dataloader: DataLoader, device: str,
            loss_fn, optim, metrics: ListOfMetrics,
-           is_train: bool = True, accum_grad: int = 1,
+           is_train: bool, accum_grad: int,
            scheduler: torch.optim.lr_scheduler.LRScheduler,
-           do_scale: bool):
+           do_scale: bool, epoch: int | None):
     
     metric_lists = defaultdict(list)
     do_loss = is_train or "loss" in next(zip(*metrics))
@@ -56,6 +57,12 @@ def _loopa(*, model: nn.Module, dataloader: DataLoader, device: str,
     scaler = torch.cuda.amp.GradScaler()
         
     for i, (X, y) in enumerate(tqdm(dataloader, desc="train phase" if is_train else "val phase")):
+        if epoch is not None:
+            with warnings.catch_warnings():
+                warnings.simplefilter("ignore")
+                scheduler.step(epoch + i / len(dataloader))
+            
+        
         X, y = to(X, device), to(y, device)
         
         with (torch.autocast(device_type='cuda', dtype=torch.float16) if do_scale else dummy_ctx()):
@@ -78,11 +85,11 @@ def _loopa(*, model: nn.Module, dataloader: DataLoader, device: str,
                     metric_lists["loss"].append(loss.item() * accum_grad)
                 else:
                     metric_lists[metric].append(fn(y_pred, y))    
-    scheduler.step()
-    
     if is_train and (i + 1) % accum_grad:
         optim.step()
         optim.zero_grad()
+    
+    if epoch is None: scheduler.step()
     
     metric_results = {}
     for key, _, agg in metrics:
@@ -99,7 +106,7 @@ def loopa(model: nn.Module, dataloader: DataLoader, *, device: str,
            loss_fn=None, optim=None, metrics: ListOfMetrics,
            is_train: bool = True, accum_grad: int = 1,
            scheduler: torch.optim.lr_scheduler.LRScheduler | None = None,
-           do_scale: bool = False):
+           do_scale: bool = False, epoch: int | None = None):
     # preparation function for _loopa
     _metrics = []
     
@@ -119,7 +126,7 @@ def loopa(model: nn.Module, dataloader: DataLoader, *, device: str,
         ret = _loopa(model=model, dataloader=dataloader, device=device,
                      loss_fn=loss_fn, optim=optim, metrics=metrics, accum_grad=accum_grad,
                      is_train=is_train, scheduler=scheduler,
-                     do_scale=do_scale)
+                     do_scale=do_scale, epoch=epoch)
         model.train(not is_train)
     return ret
     
@@ -136,3 +143,21 @@ METRICS = {
     "loss": [None, np.mean],
     "acc": mean_metric(lambda y_pred, y_true: (y_pred.argmax(-1) == y_true).sum()),
 }
+
+class CosineWarmupScheduler(torch.optim.lr_scheduler._LRScheduler):
+    # https://uvadlc-notebooks.readthedocs.io/en/latest/tutorial_notebooks/tutorial6/Transformers_and_MHAttention.html
+    
+    def __init__(self, optimizer: torch.optim.Optimizer, warmup_epochs: int, max_iters: int):
+        self.warmup = warmup_epochs
+        self.max_num_iters = max_iters
+        super().__init__(optimizer)
+
+    def get_lr(self):
+        lr_factor = self.get_lr_factor(epoch=self.last_epoch)
+        return [base_lr * lr_factor for base_lr in self.base_lrs]
+
+    def get_lr_factor(self, epoch):
+        lr_factor = 0.5 * (1 + np.cos(np.pi * epoch / self.max_num_iters))
+        if epoch <= self.warmup:
+            lr_factor *= epoch * 1.0 / self.warmup
+        return lr_factor
