@@ -35,9 +35,11 @@ ListOfMetrics = list[
 ]
 
 def to(X, device):
+    if isinstance(X, [list, tuple]):
+        return [to(val, device) for val in X]
     if isinstance(X, dict):
         for key, val in X.items():
-            X[key] = val.to(device)
+            X[key] = to(val, device)
         return X
     if isinstance(X, torch.Tensor):
         return X.to(device)
