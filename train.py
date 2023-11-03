@@ -35,7 +35,7 @@ ListOfMetrics = list[
 ]
 
 def to(X, device):
-    if isinstance(X, [list, tuple]):
+    if isinstance(X, list | tuple):
         return [to(val, device) for val in X]
     if isinstance(X, dict):
         for key, val in X.items():
