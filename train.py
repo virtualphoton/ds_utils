@@ -10,18 +10,18 @@ from contextlib import contextmanager
 from torch.utils.data import DataLoader
 from tqdm.auto import tqdm
 
+from .magic import reprint
+
+def get_train_val(train_set, val_set, batch_size, num_workers=0, collate_fn=None):
+    params = dict(batch_size=batch_size, num_workers=num_workers, collate_fn=collate_fn)
+    train_loader = DataLoader(train_set, shuffle=True, **params)
+    val_loader = DataLoader(val_set, shuffle=False, **params)
+    return train_loader, val_loader
+
 @contextmanager
 def dummy_ctx(*args, **kwargs):
     yield
 
-try:
-    from .magic import reprint
-except ImportError:
-    try:
-        from magic import reprint
-    except ImportError:
-        warn("Couldn't load magic!")
-        reprint = lambda t: t
 
 __all__ = ["loopa", "ACC_METRIC", "EarlyStopper"]
 
@@ -84,7 +84,7 @@ def _loopa(*, model: nn.Module, dataloader: DataLoader, device: str,
         with torch.no_grad():
             for metric, fn, _ in metrics:
                 if metric == "loss":
-                    metric_lists["loss"].append(loss.item() * accum_grad)
+                    metric_lists["loss"].append(loss.detach().cpu() * accum_grad)
                 else:
                     metric_lists[metric].append(fn(y_pred, y))    
     if is_train and (i + 1) % accum_grad:
@@ -138,28 +138,10 @@ def mean_metric(sum_of_metrics_func: Callable[[torch.Tensor, torch.Tensor], floa
     def aggregator(results):
         correct, total = map(sum, zip(*results))
         ret = correct / total
-        return ret.item() if isinstance(ret, torch.Tensor) else ret
+        return ret.detach().cpu() if isinstance(ret, torch.Tensor) else ret
     return collector, aggregator
 
 METRICS = {
     "loss": [None, np.mean],
     "acc": mean_metric(lambda y_pred, y_true: (y_pred.argmax(-1) == y_true).sum()),
 }
-
-class CosineWarmupScheduler(torch.optim.lr_scheduler._LRScheduler):
-    # https://uvadlc-notebooks.readthedocs.io/en/latest/tutorial_notebooks/tutorial6/Transformers_and_MHAttention.html
-    
-    def __init__(self, optimizer: torch.optim.Optimizer, warmup_epochs: int, max_iters: int):
-        self.warmup = warmup_epochs
-        self.max_num_iters = max_iters
-        super().__init__(optimizer)
-
-    def get_lr(self):
-        lr_factor = self.get_lr_factor(epoch=self.last_epoch)
-        return [base_lr * lr_factor for base_lr in self.base_lrs]
-
-    def get_lr_factor(self, epoch):
-        lr_factor = 0.5 * (1 + np.cos(np.pi * epoch / self.max_num_iters))
-        if epoch <= self.warmup:
-            lr_factor *= epoch * 1.0 / self.warmup
-        return lr_factor
