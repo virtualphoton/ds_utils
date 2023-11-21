@@ -48,6 +48,11 @@ class State:
         his.load_state_dict(torch.load(f"{self.path}.history"))
         return his
     
+    @staticmethod
+    def load_model_into(path, model):
+        chkp = torch.load(path, "cpu")
+        model.load_state_dict(chkp["model"])
+    
     def as_tuple(self) -> tuple[nn.Module, torch.optim.Optimizer, History, torch.optim.lr_scheduler.LRScheduler | None]:
         return self.model, self.optimizer, self.history, self.scheduler
     
