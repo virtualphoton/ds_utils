@@ -1,6 +1,6 @@
 import warnings
 from collections import defaultdict
-from typing import Callable, Any
+from typing import Callable, Any, Optional
 from warnings import warn
 
 import numpy as np
@@ -9,6 +9,11 @@ import torch.nn as nn
 from contextlib import contextmanager
 from torch.utils.data import DataLoader
 from tqdm.auto import tqdm
+
+try:
+    from torch.optim.lr_scheduler import LRScheduler
+except ImportError:
+    print("couldn't load scheduler")
 
 from .magic import reprint
 
@@ -49,7 +54,7 @@ def to(X, device):
 def _loopa(*, model: nn.Module, dataloader: DataLoader, device: str,
            loss_fn, optim, metrics: ListOfMetrics,
            is_train: bool, accum_grad: int,
-           scheduler: torch.optim.lr_scheduler.LRScheduler,
+           scheduler: "LRScheduler",
            do_scale: bool, epoch: int | None):
     
     metric_lists = defaultdict(list)
@@ -107,7 +112,7 @@ class DummyOptim:
 def loopa(model: nn.Module, dataloader: DataLoader, *, device: str,
            loss_fn=None, optim=None, metrics: ListOfMetrics,
            is_train: bool = True, accum_grad: int = 1,
-           scheduler: torch.optim.lr_scheduler.LRScheduler | None = None,
+           scheduler: Optional["LRScheduler"] = None,
            do_scale: bool = False, epoch: int | None = None):
     # preparation function for _loopa
     _metrics = []

@@ -1,10 +1,16 @@
 import os
 from dataclasses import dataclass
 from warnings import warn
+from typing import Optional
 
 import numpy as np
 import torch
 import torch.nn as nn
+
+try:
+    from torch.optim.lr_scheduler import LRScheduler
+except ImportError:
+    print("couldn't load scheduler")
 
 from .plotter import History
 
@@ -13,7 +19,7 @@ class State:
     model: nn.Module
     optimizer: torch.optim.Optimizer
     history: History
-    scheduler: torch.optim.lr_scheduler.LRScheduler | None = None
+    scheduler: Optional["LRScheduler"] = None
     path: str = None
     
     def __post_init__(self):
@@ -53,7 +59,7 @@ class State:
         chkp = torch.load(path, "cpu")
         model.load_state_dict(chkp["model"])
     
-    def as_tuple(self) -> tuple[nn.Module, torch.optim.Optimizer, History, torch.optim.lr_scheduler.LRScheduler | None]:
+    def as_tuple(self) -> tuple[nn.Module, torch.optim.Optimizer, History, Optional["LRScheduler"]]:
         return self.model, self.optimizer, self.history, self.scheduler
     
 @dataclass
@@ -61,6 +67,7 @@ class EarlyStopper:
     state: State
     loss: str = "loss"
     patience: int | None = 3
+    min_epochs: int = 1
     min_delta: float = 0
     
     _last_history_len: int = None
@@ -102,7 +109,9 @@ class EarlyStopper:
         self._last_history_len = len(self.state.history)
         losses = self.get_losses()
         
-        if not len(losses):
+        if len(losses) < self.min_epochs:
+            if len(losses):
+                self.state.save()
             return False
         
         self._last_history_len = len(losses)

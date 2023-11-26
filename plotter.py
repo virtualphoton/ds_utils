@@ -12,6 +12,8 @@ from IPython.display import display, Image
 from plotly.subplots import make_subplots
 from tqdm.auto import tqdm
 
+import kaleido
+
 
 Report = dict[str, float]
 @dataclass
