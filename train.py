@@ -109,29 +109,33 @@ class DummyOptim:
     def step(self, *args, **kwargs): pass
 
 @reprint
-def loopa(model: nn.Module, dataloader: DataLoader, *, device: str,
+def loopa(model: nn.Module, dataloader: DataLoader, device: str, *,
            loss_fn=None, optim=None, metrics: ListOfMetrics,
            is_train: bool = True, accum_grad: int = 1,
            scheduler: Optional["LRScheduler"] = None,
            do_scale: bool = False, epoch: int | None = None):
     # preparation function for _loopa
-    _metrics = []
+    metrics_unified = []
     
     for metric in metrics:
-        if isinstance(metric, str):
-            if metric not in METRICS:
-                raise RuntimeError(f"couldn't find metric: {metric}")
-            _metrics.append((metric, *METRICS[metric]))
-        else:
-            _metrics.append(metric)
-    metrics = _metrics
+        match metric:
+            case [name, collector]:
+                metrics_unified.append((name, collector, lambda _: None))
+            case [_, _, _]:
+                metrics_unified.append(metric)
+            case str():
+                if metric not in METRICS:
+                    raise RuntimeError(f"couldn't find metric: {metric}")
+                metrics_unified.append((metric, *METRICS[metric]))
+            case _:
+                raise RuntimeError("incorrect metric definition: {metric}")
     
     optim = optim if is_train else DummyOptim()
     scheduler = scheduler if scheduler is not None and is_train else DummyOptim()
     with (torch.no_grad() if not is_train else dummy_ctx()):
         model.train(is_train)
         ret = _loopa(model=model, dataloader=dataloader, device=device,
-                     loss_fn=loss_fn, optim=optim, metrics=metrics, accum_grad=accum_grad,
+                     loss_fn=loss_fn, optim=optim, metrics=metrics_unified, accum_grad=accum_grad,
                      is_train=is_train, scheduler=scheduler,
                      do_scale=do_scale, epoch=epoch)
         model.train(not is_train)
@@ -143,8 +147,13 @@ def mean_metric(sum_of_metrics_func: Callable[[torch.Tensor, torch.Tensor], floa
     def aggregator(results):
         correct, total = map(sum, zip(*results))
         ret = correct / total
-        return ret.detach().cpu() if isinstance(ret, torch.Tensor) else ret
+        return ret.item() if isinstance(ret, torch.Tensor) else ret
     return collector, aggregator
+
+def save_into(container: list):
+    def inner(y_pred, _):
+        container.append(y_pred.detach().cpu())
+    return inner
 
 METRICS = {
     "loss": [None, np.mean],

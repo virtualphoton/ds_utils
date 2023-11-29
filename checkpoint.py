@@ -1,4 +1,5 @@
 import os
+from pathlib import Path
 from dataclasses import dataclass
 from warnings import warn
 from typing import Optional
@@ -24,8 +25,12 @@ class State:
     
     def __post_init__(self):
         assert self.path is not None
-        if os.path.exists(self.path):
+        self.path = Path(self.path)
+        if self.path.exists():
             warn(f"Saver: {self.path} already exists!")
+        else:
+            self.path.mkdir()
+        self.load_history = self.__load_history
     
     def save(self):
         state_dict = dict(model=self.model.state_dict(),
@@ -33,11 +38,11 @@ class State:
                           history=self.history.state_dict())
         if self.scheduler is not None:
             state_dict["scheduler"] = self.scheduler.state_dict()
-        torch.save(state_dict, self.path)
+        torch.save(state_dict, self.path / "model.chkp")
         self.save_history()
     
     def load_inplace(self):
-        chkp = torch.load(self.path, "cpu")
+        chkp = torch.load(self.path / "model.chkp", "cpu")
         self.model.load_state_dict(chkp["model"])
         self.optimizer.load_state_dict(chkp["optimizer"])
         self.history.load_state_dict(chkp["history"])
@@ -47,20 +52,25 @@ class State:
     def save_history(self):
         # for learning curves, need full history not just until the best
         torch.save(self.history.state_dict(),
-                   f"{self.path}.history")
-        
-    def load_history(self):
-        his = History()
-        his.load_state_dict(torch.load(f"{self.path}.history"))
-        return his
-    
-    @staticmethod
-    def load_model_into(path, model):
-        chkp = torch.load(path, "cpu")
-        model.load_state_dict(chkp["model"])
+                   self.path / "history.chkp")
     
     def as_tuple(self) -> tuple[nn.Module, torch.optim.Optimizer, History, Optional["LRScheduler"]]:
         return self.model, self.optimizer, self.history, self.scheduler
+    
+    @staticmethod
+    def load_history(path):
+        his = History()
+        his.load_state_dict(torch.load(path / "history.chkp"))
+        return his
+    
+    def __load_history(self):
+        return State.load_history(self.path)
+    
+    @staticmethod
+    def load_model_into(path, model):
+        chkp = torch.load(path / "model.chkp", "cpu")
+        model.load_state_dict(chkp["model"])
+        return model
     
 @dataclass
 class EarlyStopper:
