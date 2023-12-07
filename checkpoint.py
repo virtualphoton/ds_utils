@@ -1,4 +1,4 @@
-import os
+import dataclasses
 from pathlib import Path
 from dataclasses import dataclass
 from warnings import warn
@@ -19,13 +19,18 @@ from .plotter import History
 class State:
     model: nn.Module
     optimizer: torch.optim.Optimizer
-    history: History
+    _: dataclasses.KW_ONLY
+    history: History = None
     scheduler: Optional["LRScheduler"] = None
     path: str = None
     
     def __post_init__(self):
         assert self.path is not None
         self.path = Path(self.path)
+        
+        if self.history is None:
+            self.history = History()
+        
         if self.path.exists():
             warn(f"Saver: {self.path} already exists!")
         else:

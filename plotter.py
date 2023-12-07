@@ -8,7 +8,7 @@ import pandas as pd
 import plotly
 import plotly.express as px
 import plotly.graph_objects as go
-from IPython.display import display, Image
+from IPython.display import display, Image, clear_output
 from plotly.subplots import make_subplots
 from tqdm.auto import tqdm
 
@@ -83,6 +83,10 @@ class Plotter:
     path: Path | str | None = None
     bound_history: History | None = None
     # custom_range: dict[str, tuple[int, int]] = field(default_factory=dict)
+    
+    @staticmethod
+    def from_state(state):
+        return Plotter(bound_history=state.history, path=state.path / "plot.png")
     
     def __post_init__(self):
         if self.path is not None:
@@ -172,3 +176,10 @@ class Plotter:
 
 def plotly_static(fig: plotly.graph_objs._figure.Figure, format: str = "png") -> Image:
     return Image(fig.to_image(format=format))
+
+def plot_at_end(plotter: Plotter):
+    plotter.plot()
+    clear_output()
+    display(plotter.draw_no_widget())
+    display(plotly_static(plotter.fig))
+    

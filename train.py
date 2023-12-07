@@ -9,13 +9,60 @@ import torch.nn as nn
 from contextlib import contextmanager
 from torch.utils.data import DataLoader
 from tqdm.auto import tqdm
+from dataclasses import dataclass
+import dataclasses
+import inspect
+
+from .utils import Config
+from .magic import reprint
 
 try:
     from torch.optim.lr_scheduler import LRScheduler
 except ImportError:
     print("couldn't load scheduler")
 
-from .magic import reprint
+ListOfMetrics = list[
+    str |
+    tuple[
+        str,
+        Callable[[torch.Tensor, torch.Tensor], Any], # metric calculation
+        Callable[[list[Any]], float],                # metric aggregation
+    ]
+]
+
+def fetch_device(device, delta):
+    # +1 from caller; +1 because this method is called
+    # delta - number of intermediate step between global and caller of this method
+    if device is None:
+        device = inspect.stack()[2 + delta][0].f_globals.get("device", None)
+    return device
+
+@dataclass
+class TrainConfig(Config):
+    _: dataclasses.KW_ONLY
+    model: nn.Module = None
+    dataloader: DataLoader = None
+    device: str = None
+    loss_fn: Any = None
+    optim: Any = None
+    metrics: ListOfMetrics = None
+    is_train: bool = None
+    accum_grad: int = None
+    scheduler: Optional["LRScheduler"] = None
+    do_scale: bool = None
+    epoch: int | None = None
+    
+    def with_state(self, state):
+        self.model = state.model
+        self.optim = state.optimizer
+        self.scheduler = state.scheduler
+        return self
+    
+    def __post_init__(self):
+        self.device = fetch_device(self.device, delta=1)
+        if self.device is None:
+            raise RuntimeError("device must be either passed as kward, or be defined as global")
+
 
 def get_train_val(train_set, val_set, batch_size, num_workers=0, collate_fn=None):
     params = dict(batch_size=batch_size, num_workers=num_workers, collate_fn=collate_fn)
@@ -29,15 +76,6 @@ def dummy_ctx(*args, **kwargs):
 
 
 __all__ = ["loopa", "ACC_METRIC", "EarlyStopper"]
-
-ListOfMetrics = list[
-    str |
-    tuple[
-        str,
-        Callable[[torch.Tensor, torch.Tensor], Any], # metric calculation
-        Callable[[list[Any]], float],                # metric aggregation
-    ]
-]
 
 def to(X, device):
     if isinstance(X, list | tuple):
@@ -63,14 +101,17 @@ def _loopa(*, model: nn.Module, dataloader: DataLoader, device: str,
     optim.zero_grad()
     scaler = torch.cuda.amp.GradScaler()
         
-    for i, (X, y) in enumerate(tqdm(dataloader, desc="train phase" if is_train else "val phase")):
+    for i, batch in enumerate(tqdm(dataloader, desc="train phase" if is_train else "val phase")):
+        try:
+            (X, y) = batch
+            X, y = to(X, device), to(y, device)
+        except ValueError:
+            X = y = batch.to(device)
+            
         if epoch is not None:
             with warnings.catch_warnings():
                 warnings.simplefilter("ignore")
                 scheduler.step(epoch + i / len(dataloader))
-            
-        
-        X, y = to(X, device), to(y, device)
         
         with (torch.autocast(device_type='cuda', dtype=torch.float16) if do_scale else dummy_ctx()):
             y_pred = model(X)
@@ -140,6 +181,13 @@ def loopa(model: nn.Module, dataloader: DataLoader, device: str, *,
                      do_scale=do_scale, epoch=epoch)
         model.train(not is_train)
     return ret
+
+@reprint
+def one_epoch(params, train_loader, val_loader, history, plotter):
+    tr = loopa(**params, dataloader=train_loader, is_train=True)
+    val = loopa(**params, dataloader=val_loader, is_train=False)
+    history.push_epoch(tr, val)
+    plotter.plot()
     
 def mean_metric(sum_of_metrics_func: Callable[[torch.Tensor, torch.Tensor], float | torch.Tensor]):
     # ! if return is torch.Tensor, it has to be a scalar
