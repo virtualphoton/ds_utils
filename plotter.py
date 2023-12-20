@@ -86,7 +86,7 @@ class Plotter:
     
     @staticmethod
     def from_state(state):
-        return Plotter(bound_history=state.history, path=state.path / "plot.png")
+        return Plotter(bound_history=state.history, path=state.path / "learning_curves.png")
     
     def __post_init__(self):
         if self.path is not None:
