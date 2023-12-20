@@ -32,3 +32,15 @@ class Config(Mapping):
     
     def __setitem__(self, key, val):
         setattr(self, key, val)
+        
+    def __ior__(self, dic: Mapping):
+        assert isinstance(dic, Mapping)
+        for key, val in dic.items():
+            self[key] = val
+        return self
+    
+    def __or__(self, dic: Mapping):
+        assert isinstance(dic, Mapping)
+        for key, val in dic.items():
+            self[key] = val
+        return dict(self) | dic
