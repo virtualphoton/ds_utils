@@ -64,8 +64,8 @@ class TrainConfig(Config):
             raise RuntimeError("device must be either passed as kward, or be defined as global")
 
 
-def get_train_val(train_set, val_set, batch_size,
-                  num_workers=0, collate_fn=None, pin_memory=False):
+def get_train_val_loaders(train_set, val_set, *, batch_size, num_workers=0,
+                          collate_fn=None, pin_memory=False) -> tuple[DataLoader, DataLoader]:
     params = dict(batch_size=batch_size, num_workers=num_workers,
                   collate_fn=collate_fn, pin_memory=pin_memory)
     train_loader = DataLoader(train_set, shuffle=True, **params)
