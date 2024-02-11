@@ -1,17 +1,17 @@
+import dataclasses
+import inspect
 import warnings
 from collections import defaultdict
+from contextlib import contextmanager
+from dataclasses import dataclass
 from typing import Callable, Any, Optional
 from warnings import warn
 
 import numpy as np
 import torch
 import torch.nn as nn
-from contextlib import contextmanager
 from torch.utils.data import DataLoader
 from tqdm.auto import tqdm
-from dataclasses import dataclass
-import dataclasses
-import inspect
 
 from .utils import Config
 from .magic import reprint

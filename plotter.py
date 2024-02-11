@@ -3,6 +3,7 @@ from dataclasses import dataclass, field
 from math import ceil
 from pathlib import Path
 
+import kaleido
 import numpy as np
 import pandas as pd
 import plotly
@@ -12,7 +13,6 @@ from IPython.display import display, Image, clear_output
 from plotly.subplots import make_subplots
 from tqdm.auto import tqdm
 
-import kaleido
 
 
 Report = dict[str, float]
