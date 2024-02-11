@@ -1,8 +1,11 @@
 import builtins
+import dataclasses
 
 from toolz import compose
 from collections.abc import Mapping
-import dataclasses
+from functools import wraps
+
+import numpy as np
 
 def map(funcs, *args):
     try:
@@ -44,3 +47,13 @@ class Config(Mapping):
         for key, val in dic.items():
             self[key] = val
         return dict(self) | dic
+
+def cast_all_lists_to_np(f):
+    @wraps(f)
+    def inner(*args, **kwargs):
+        args = [np.array(arg) if isinstance(arg, list) else arg
+                for arg in args]
+        kwargs = {key : np.array(val) if isinstance(val, list) else val
+                  for key, val in kwargs.items()}
+        return f(*args, **kwargs)
+    return inner
