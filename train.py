@@ -104,11 +104,16 @@ def _loopa(*, model: nn.Module, dataloader: DataLoader, device: str,
     scaler = torch.cuda.amp.GradScaler()
         
     for i, batch in enumerate(tqdm(dataloader, desc="train phase" if is_train else "val phase")):
-        try:
+        batch = to(batch, device)
+        if isinstance(batch, dict):
+            X, y = batch.pop("X"), batch.pop("y")
+            kwargs = batch
+        elif isinstance(batch, tuple):
             (X, y) = batch
-            X, y = to(X, device), to(y, device)
-        except ValueError:
-            X = y = batch.to(device)
+            kwargs = {}
+        else:
+            X = y = batch
+            kwargs = {}
             
         if epoch is not None:
             with warnings.catch_warnings():
@@ -117,7 +122,7 @@ def _loopa(*, model: nn.Module, dataloader: DataLoader, device: str,
         
         with (torch.autocast(device_type='cuda', dtype=torch.float16) if do_scale else dummy_ctx()):
             y_pred = model(X)
-            loss = loss_fn(y_pred, y) / accum_grad if do_loss else None
+            loss = loss_fn(y_pred, y, **kwargs) / accum_grad if do_loss else None
         
         if is_train:
             (scaler.scale(loss) if do_scale else loss).backward()
@@ -134,7 +139,7 @@ def _loopa(*, model: nn.Module, dataloader: DataLoader, device: str,
                 if metric == "loss":
                     metric_lists["loss"].append(loss.detach().cpu() * accum_grad)
                 else:
-                    metric_lists[metric].append(fn(y_pred, y))    
+                    metric_lists[metric].append(fn(y_pred, y, **kwargs))
     if is_train and (i + 1) % accum_grad:
         optim.step()
         optim.zero_grad()
