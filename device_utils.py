@@ -12,7 +12,7 @@ def get_computing_device(dev = 0, verbose = False):
             physical_to_torch = {1:0, 2:1, 0:2, 3:3, 4:4, 5:5, 6:6}
             device = torch.device(f'cuda:{physical_to_torch[dev]}')
         else:
-            device = torch.device("cuda")
+            device = torch.device("cuda:0")
         
     else:
         device = torch.device('cpu')
