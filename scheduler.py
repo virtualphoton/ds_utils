@@ -4,9 +4,9 @@ import numpy as np
 class CosineWarmupScheduler(torch.optim.lr_scheduler._LRScheduler):
     # https://uvadlc-notebooks.readthedocs.io/en/latest/tutorial_notebooks/tutorial6/Transformers_and_MHAttention.html
     
-    def __init__(self, optimizer: torch.optim.Optimizer, warmup_epochs: int, max_iters: int):
+    def __init__(self, optimizer: torch.optim.Optimizer, warmup_epochs: int, num_epochs: int):
         self.warmup = warmup_epochs
-        self.max_num_iters = max_iters
+        self.max_num_iters = num_epochs
         super().__init__(optimizer)
 
     def get_lr(self):

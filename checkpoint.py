@@ -22,7 +22,7 @@ class State:
     _: dataclasses.KW_ONLY
     history: History = None
     scheduler: Optional["LRScheduler"] = None
-    path: str = None
+    path: Path = None
     
     def __post_init__(self):
         assert self.path is not None
