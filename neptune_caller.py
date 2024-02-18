@@ -9,13 +9,13 @@ from .plotter import History
 
 def get_neptune_key() -> str:
     file = Path(".env")
-    if not file.exists():
-        key = input("No .env was found, please input (key won't be displayed):\n")
+    if not file.exists() or "NEPTUNE_API_KEY" not in dotenv_values(file):
+        key = input("No .env was found, please input the key (it won't be displayed):\n")
         if not key:
             raise RuntimeError("No key was provided, aborting")
         
-        with file.open():
-            print(f'NEPTUNE_API_KEY="{key}"', file=file)
+        with file.open("w") as f:
+            print(f'NEPTUNE_API_KEY="{key}"', file=f)
             
     return dotenv_values(file)["NEPTUNE_API_KEY"]
     
@@ -32,7 +32,7 @@ def get_neptune_run(name: str, description: str, init_kwargs: dict[str, Any],
     api_key = get_neptune_key()
     
     neptune_run = neptune.init_run(
-        project="YSDA/NLP-hw-extra",
+        project=project_name,
         api_token=api_key,
         name=name,
         description=description,
