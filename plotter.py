@@ -171,7 +171,7 @@ class Plotter:
             self.fig.write_image(self.path)
             self.fig.write_html(str(self.path) + ".html")
             
-    def draw_no_widget(self):
+    def draw_no_widget(self) -> plotly.graph_objs._figure.Figure:
         return plotly.io.from_json(self.fig.to_json())
 
 def plotly_static(fig: plotly.graph_objs._figure.Figure, format: str = "png") -> Image:
