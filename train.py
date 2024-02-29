@@ -49,7 +49,7 @@ class TrainConfig(Config):
     is_train: bool = None
     accum_grad: int = None
     scheduler: Optional["LRScheduler"] = None
-    do_scale: bool = None
+    mixed_precision: bool = None
     epoch: int | None = None
     
     def with_state(self, state):
@@ -95,7 +95,7 @@ def _loopa(*, model: nn.Module, dataloader: DataLoader, device: str,
            loss_fn, optim, metrics: ListOfMetrics,
            is_train: bool, accum_grad: int,
            scheduler: "LRScheduler",
-           do_scale: bool, epoch: int | None):
+           mixed_precision: bool, epoch: int | None):
     
     metric_lists = defaultdict(list)
     do_loss = is_train or "loss" in next(zip(*metrics))
@@ -120,14 +120,14 @@ def _loopa(*, model: nn.Module, dataloader: DataLoader, device: str,
                 warnings.simplefilter("ignore")
                 scheduler.step(epoch + i / len(dataloader))
         
-        with (torch.autocast(device_type='cuda', dtype=torch.float16) if do_scale else dummy_ctx()):
-            y_pred = model(X)
+        with (torch.autocast(device_type='cuda', dtype=torch.float16) if mixed_precision else dummy_ctx()):
+            y_pred = model(X, **kwargs)
             loss = loss_fn(y_pred, y, **kwargs) / accum_grad if do_loss else None
         
         if is_train:
-            (scaler.scale(loss) if do_scale else loss).backward()
+            (scaler.scale(loss) if mixed_precision else loss).backward()
             if not (i + 1) % accum_grad:
-                if do_scale:
+                if mixed_precision:
                     scaler.step(optim)
                     scaler.update()
                 else:
@@ -161,7 +161,7 @@ def loopa(model: nn.Module, dataloader: DataLoader, device: str, *,
            loss_fn=None, optim=None, metrics: ListOfMetrics,
            is_train: bool = True, accum_grad: int = 1,
            scheduler: Optional["LRScheduler"] = None,
-           do_scale: bool = False, epoch: int | None = None):
+           mixed_precision: bool = False, epoch: int | None = None):
     # preparation function for _loopa
     metrics_unified = []
     
@@ -185,7 +185,7 @@ def loopa(model: nn.Module, dataloader: DataLoader, device: str, *,
         ret = _loopa(model=model, dataloader=dataloader, device=device,
                      loss_fn=loss_fn, optim=optim, metrics=metrics_unified, accum_grad=accum_grad,
                      is_train=is_train, scheduler=scheduler,
-                     do_scale=do_scale, epoch=epoch)
+                     mixed_precision=mixed_precision, epoch=epoch)
         model.train(not is_train)
     return ret
 
