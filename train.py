@@ -81,7 +81,7 @@ __all__ = ["loopa", "ACC_METRIC", "EarlyStopper"]
 
 def to(X, device):
     if isinstance(X, list | tuple):
-        return [to(val, device) for val in X]
+        return type(X)([to(val, device) for val in X])
     if isinstance(X, dict):
         for key, val in X.items():
             X[key] = to(val, device)
@@ -108,8 +108,8 @@ def _loopa(*, model: nn.Module, dataloader: DataLoader, device: str,
         if isinstance(batch, dict):
             X, y = batch.pop("X"), batch.pop("y")
             kwargs = batch
-        elif isinstance(batch, tuple):
-            (X, y) = batch
+        elif isinstance(batch, (tuple, list)):
+            X, y = batch
             kwargs = {}
         else:
             X = y = batch
