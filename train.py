@@ -51,6 +51,7 @@ class TrainConfig(Config):
     scheduler: Optional["LRScheduler"] = None
     do_scale: bool = None
     epoch: int | None = None
+    use_tqdm: bool = True
     
     def with_state(self, state):
         self.model = state.model
@@ -95,7 +96,8 @@ def _loopa(*, model: nn.Module, dataloader: DataLoader, device: str,
            loss_fn, optim, metrics: ListOfMetrics,
            is_train: bool, accum_grad: int,
            scheduler: "LRScheduler",
-           do_scale: bool, epoch: int | None):
+           do_scale: bool, epoch: int | None,
+           iterator):
     
     metric_lists = defaultdict(list)
     do_loss = is_train or "loss" in next(zip(*metrics))
@@ -103,12 +105,12 @@ def _loopa(*, model: nn.Module, dataloader: DataLoader, device: str,
     optim.zero_grad()
     scaler = torch.cuda.amp.GradScaler()
         
-    for i, batch in enumerate(tqdm(dataloader, desc="train phase" if is_train else "val phase")):
+    for i, batch in enumerate(iterator):
         batch = to(batch, device)
         if isinstance(batch, dict):
             X, y = batch.pop("X"), batch.pop("y")
             kwargs = batch
-        elif isinstance(batch, tuple):
+        elif isinstance(batch, (tuple, list)):
             (X, y) = batch
             kwargs = {}
         else:
@@ -161,7 +163,8 @@ def loopa(model: nn.Module, dataloader: DataLoader, device: str, *,
            loss_fn=None, optim=None, metrics: ListOfMetrics,
            is_train: bool = True, accum_grad: int = 1,
            scheduler: Optional["LRScheduler"] = None,
-           do_scale: bool = False, epoch: int | None = None):
+           do_scale: bool = False, epoch: int | None = None,
+           use_tqdm: bool = True):
     # preparation function for _loopa
     metrics_unified = []
     
@@ -180,12 +183,19 @@ def loopa(model: nn.Module, dataloader: DataLoader, device: str, *,
     
     optim = optim if is_train else DummyOptim()
     scheduler = scheduler if scheduler is not None and is_train else DummyOptim()
+
+    if use_tqdm:
+        iterator = tqdm(dataloader, desc="train phase" if is_train else "val phase")
+    else:
+        iterator = dataloader
+        
     with (torch.no_grad() if not is_train else dummy_ctx()):
         model.train(is_train)
         ret = _loopa(model=model, dataloader=dataloader, device=device,
                      loss_fn=loss_fn, optim=optim, metrics=metrics_unified, accum_grad=accum_grad,
                      is_train=is_train, scheduler=scheduler,
-                     do_scale=do_scale, epoch=epoch)
+                     do_scale=do_scale, epoch=epoch,
+                     iterator=iterator)
         model.train(not is_train)
     return ret
 
@@ -209,6 +219,21 @@ def save_into(container: list):
     def inner(y_pred, _):
         container.append(y_pred.detach().cpu())
     return inner
+
+def calc_metric_from_all(metric: Callable[[torch.Tensor, torch.Tensor], float | torch.Tensor]):
+    """
+    Stacks all `y_pred` and `y_true` into 1 tensor and at the end of the epoch
+    applies the metric function.
+    """
+    def collector(y_pred, y_true):
+        return (y_pred, y_true)
+        
+    def aggregator(entries: list[tuple[torch.Tensor, torch.Tensor]]):
+        y_pred, y_true = map(torch.concat, zip(*entries))
+        return metric(y_pred, y_true)
+    
+    return collector, aggregator
+    
 
 METRICS = {
     "loss": [None, np.mean],
