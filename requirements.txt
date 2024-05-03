@@ -1,6 +1,6 @@
-neptune>=1.8.3
-python-dotenv>=0.21.0
-toolz>=0.21.0
+neptune>=1.10.2
+python-dotenv>=1.0.1
+toolz>=0.12.1
 numpy>=1.26.0
 tqdm>=4.65.0
 scikit-learn>=1.2.2
